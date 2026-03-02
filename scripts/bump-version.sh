@@ -61,10 +61,5 @@ echo "==> Pushing to remote"
 git push && git push --tags
 
 echo ""
-echo "==> Creating GitHub release"
-gh release create "v$NEW_VERSION" \
-  --title "v$NEW_VERSION" \
-  --generate-notes
-
-echo ""
-echo "Done! Version bumped to v$NEW_VERSION and release created."
+echo "Done! Version v$NEW_VERSION tagged and pushed."
+echo "The release will be created automatically by the release workflow after builds complete."

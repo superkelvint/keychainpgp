@@ -68,10 +68,5 @@ git push
 git push --tags
 
 Write-Host ""
-Write-Host "==> Creating GitHub release" -ForegroundColor Cyan
-gh release create "v$Version" `
-    --title "v$Version" `
-    --generate-notes
-
-Write-Host ""
-Write-Host "Done! Version bumped to v$Version and release created." -ForegroundColor Green
+Write-Host "Done! Version v$Version tagged and pushed." -ForegroundColor Green
+Write-Host "The release will be created automatically by the release workflow after builds complete." -ForegroundColor Yellow
