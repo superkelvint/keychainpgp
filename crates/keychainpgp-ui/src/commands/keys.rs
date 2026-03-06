@@ -58,6 +58,7 @@ pub struct KeyInfo {
     pub expires_at: Option<String>,
     pub trust_level: i32,
     pub is_own_key: bool,
+    pub is_revoked: bool,
 }
 
 impl From<KeyRecord> for KeyInfo {
@@ -71,6 +72,7 @@ impl From<KeyRecord> for KeyInfo {
             expires_at: r.expires_at,
             trust_level: r.trust_level,
             is_own_key: r.is_own_key,
+            is_revoked: r.is_revoked,
         }
     }
 }
@@ -117,6 +119,7 @@ pub fn generate_key_pair(
         expires_at: info.expires_at,
         trust_level: 2, // Own key = verified
         is_own_key: true,
+        is_revoked: info.is_revoked,
         pgp_data: key_pair.public_key.clone(),
     };
 
@@ -189,6 +192,7 @@ pub fn import_key(state: State<'_, AppState>, key_data: String) -> Result<KeyInf
         expires_at: cert_info.expires_at,
         trust_level: if cert_info.has_secret_key { 2 } else { 1 },
         is_own_key: cert_info.has_secret_key,
+        is_revoked: cert_info.is_revoked,
         pgp_data: key_data.as_bytes().to_vec(),
     };
 
@@ -329,6 +333,7 @@ pub struct KeyDetailedInfo {
     pub expires_at: Option<String>,
     pub trust_level: i32,
     pub is_own_key: bool,
+    pub is_revoked: bool,
     pub user_ids: Vec<UserIdDto>,
     pub subkeys: Vec<SubkeyInfoDto>,
 }
@@ -384,6 +389,7 @@ pub fn inspect_key_detailed(
         expires_at: record.expires_at,
         trust_level: record.trust_level,
         is_own_key: record.is_own_key,
+        is_revoked: record.is_revoked,
         user_ids,
         subkeys,
     })
@@ -456,6 +462,7 @@ pub async fn wkd_lookup(
         expires_at: cert_info.expires_at,
         trust_level: 0,
         is_own_key: false,
+        is_revoked: cert_info.is_revoked,
     }))
 }
 
@@ -492,6 +499,7 @@ pub async fn keyserver_search(
                     expires_at: cert_info.expires_at,
                     trust_level: 0,
                     is_own_key: false,
+                    is_revoked: cert_info.is_revoked,
                 });
             }
             Err(_) => continue,
@@ -501,7 +509,7 @@ pub async fn keyserver_search(
     Ok(keys)
 }
 
-/// Upload a public key to a keyserver.
+/// Upload a public key to all configured keyservers.
 #[tauri::command]
 pub async fn keyserver_upload(
     app: AppHandle,
@@ -509,10 +517,23 @@ pub async fn keyserver_upload(
     fingerprint: String,
     keyserver_url: Option<String>,
 ) -> Result<String, String> {
-    let url = keyserver_url.unwrap_or_else(|| "https://keys.openpgp.org".to_string());
-    validate_keyserver_url(&url)?;
-    let proxy = get_proxy_url(&app);
+    let urls = if let Some(url) = keyserver_url {
+        vec![url]
+    } else {
+        let settings = super::settings::get_settings(app.clone(), state.clone());
+        settings
+            .keyserver_url
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect()
+    };
 
+    if urls.is_empty() {
+        return Err("No keyservers configured.".into());
+    }
+
+    let proxy = get_proxy_url(&app);
     let key_data = {
         let keyring = state
             .keyring
@@ -525,9 +546,44 @@ pub async fn keyserver_upload(
         record.pgp_data.clone()
     };
 
-    keychainpgp_keys::network::keyserver::keyserver_upload(&key_data, &url, proxy.as_deref())
+    let mut successes = Vec::new();
+    let mut failures = Vec::new();
+
+    for url in urls {
+        if let Err(e) = validate_keyserver_url(&url) {
+            failures.push(format!("{url}: {e}"));
+            continue;
+        }
+
+        match keychainpgp_keys::network::keyserver::keyserver_upload(
+            &key_data,
+            &url,
+            proxy.as_deref(),
+        )
         .await
-        .map_err(|e| e.to_string())
+        {
+            Ok(_) => successes.push(url),
+            Err(e) => failures.push(format!("{url}: {e}")),
+        }
+    }
+
+    if successes.is_empty() {
+        Err(format!(
+            "Upload failed for all keyservers: {}",
+            failures.join("; ")
+        ))
+    } else if failures.is_empty() {
+        Ok(format!(
+            "Key uploaded successfully to: {}",
+            successes.join(", ")
+        ))
+    } else {
+        Ok(format!(
+            "Partial success. Uploaded to: {}. Failed for: {}",
+            successes.join(", "),
+            failures.join("; ")
+        ))
+    }
 }
 
 /// Test a proxy connection by making a simple HTTPS request through it.
@@ -608,6 +664,7 @@ pub fn import_backup(
                     expires_at: cert_info.expires_at,
                     trust_level: 2,
                     is_own_key: true,
+                    is_revoked: cert_info.is_revoked,
                     pgp_data: public_bytes,
                 };
                 // Delete the public-only record and re-store with secret material
@@ -637,6 +694,7 @@ pub fn import_backup(
             expires_at: cert_info.expires_at,
             trust_level: if is_own { 2 } else { 1 },
             is_own_key: is_own,
+            is_revoked: cert_info.is_revoked,
             pgp_data: public_bytes,
         };
 
@@ -658,4 +716,176 @@ pub fn import_backup(
         keys: imported_keys,
         skipped_count: skipped,
     })
+}
+
+/// Export a private key to a file.
+#[tauri::command]
+pub fn export_private_key(
+    state: State<'_, AppState>,
+    fingerprint: String,
+    path: String,
+) -> Result<(), String> {
+    let secret_data = if state.opsec_mode.load(Ordering::SeqCst) {
+        let opsec_keys = state
+            .opsec_secret_keys
+            .lock()
+            .map_err(|e| format!("Internal error: {e}"))?;
+        opsec_keys
+            .get(&fingerprint)
+            .ok_or_else(|| "Key not found in OPSEC session".to_string())?
+            .to_vec()
+    } else {
+        let keyring = state
+            .keyring
+            .lock()
+            .map_err(|e| format!("Internal error: {e}"))?;
+        let record = keyring
+            .get_key(&fingerprint)
+            .map_err(|e| format!("Failed to look up key: {e}"))?
+            .ok_or_else(|| format!("Key not found: {fingerprint}"))?;
+
+        if !record.is_own_key {
+            return Err("Cannot export private key for a contact".to_string());
+        }
+
+        let secret_box = keyring
+            .get_secret_key(&fingerprint)
+            .map_err(|e| format!("Failed to retrieve secret key: {e}"))?;
+        secret_box.expose_secret().clone()
+    };
+
+    std::fs::write(&path, secret_data).map_err(|e| format!("Failed to write file: {e}"))?;
+
+    Ok(())
+}
+
+/// Publish a revocation certificate to all configured keyservers.
+#[tauri::command]
+pub async fn publish_revocation_cert(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    fingerprint: String,
+) -> Result<String, String> {
+    let rev_cert = {
+        let keyring = state
+            .keyring
+            .lock()
+            .map_err(|e| format!("Internal error: {e}"))?;
+        keyring
+            .get_revocation_cert(&fingerprint)
+            .map_err(|e| format!("Failed to look up revocation cert: {e}"))?
+            .ok_or_else(|| format!("Revocation certificate not found for: {fingerprint}"))?
+    };
+
+    let settings = super::settings::get_settings(app.clone(), state.clone());
+    let urls: Vec<String> = settings
+        .keyserver_url
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+
+    if urls.is_empty() {
+        return Err("No keyservers configured in settings.".into());
+    }
+
+    let proxy = get_proxy_url(&app);
+    let mut successes = Vec::new();
+    let mut failures = Vec::new();
+
+    // Prepare the merged "revoked certificate" for upload.
+    let (merged_cert_armored, is_now_revoked) = {
+        let keyring = state
+            .keyring
+            .lock()
+            .map_err(|e| format!("Internal error: {e}"))?;
+
+        if let Ok(Some(record)) = keyring.get_key(&fingerprint) {
+            // Check if rev_cert is already a full revoked cert
+            let rev_info = state.engine.inspect_key(&rev_cert).ok();
+
+            let merged_data = if let Some(info) = rev_info {
+                if info.is_revoked {
+                    // It's already a full revoked cert, use it as is.
+                    rev_cert.clone()
+                } else {
+                    // It's a certificate but not revoked? This shouldn't happen with our generator.
+                    // Fall back to merging packets.
+                    let mut data = record.pgp_data.clone();
+                    data.extend_from_slice(&rev_cert);
+                    data
+                }
+            } else {
+                // Not a full cert, probably a standalone signature packet. Append it.
+                let mut data = record.pgp_data.clone();
+                data.extend_from_slice(&rev_cert);
+                data
+            };
+
+            let info = state
+                .engine
+                .inspect_key(&merged_data)
+                .map_err(|e| format!("Failed to inspect merged key: {e}"))?;
+
+            // Re-armor the merged data to ensure it's a single clean block
+            let armored = state
+                .engine
+                .armor_key(&merged_data)
+                .map_err(|e| format!("Failed to armor merged key: {e}"))?;
+
+            (armored, info.is_revoked)
+        } else {
+            return Err("Key not found in local keyring.".into());
+        }
+    };
+
+    for url in urls {
+        if let Err(e) = validate_keyserver_url(&url) {
+            failures.push(format!("{url}: {e}"));
+            continue;
+        }
+
+        match keychainpgp_keys::network::keyserver::keyserver_upload(
+            merged_cert_armored.as_bytes(),
+            &url,
+            proxy.as_deref(),
+        )
+        .await
+        {
+            Ok(_) => successes.push(url),
+            Err(e) => failures.push(format!("{url}: {e}")),
+        }
+    }
+
+    // Apply revocation locally
+    let keyring = state
+        .keyring
+        .lock()
+        .map_err(|e| format!("Internal error: {e}"))?;
+
+    if let Ok(Some(mut record)) = keyring.get_key(&fingerprint) {
+        let mut merged_data = record.pgp_data.clone();
+        merged_data.extend_from_slice(&rev_cert);
+
+        record.pgp_data = merged_data;
+        record.is_revoked = is_now_revoked;
+
+        let _ = keyring.delete_key(&fingerprint);
+        let _ = keyring.import_public_key(record);
+    }
+
+    if successes.is_empty() {
+        Err(format!(
+            "Revocation failed for all keyservers: {}",
+            failures.join("; ")
+        ))
+    } else if failures.is_empty() {
+        Ok(format!("Revocation published to: {}", successes.join(", ")))
+    } else {
+        Ok(format!(
+            "Partial success. Published to: {}. Failed for: {}",
+            successes.join(", "),
+            failures.join("; ")
+        ))
+    }
 }

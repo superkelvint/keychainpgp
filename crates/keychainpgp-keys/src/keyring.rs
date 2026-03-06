@@ -121,6 +121,11 @@ impl Keyring {
             .store_revocation_cert(fingerprint, rev_cert)
     }
 
+    /// Retrieve a revocation certificate for the given key.
+    pub fn get_revocation_cert(&self, fingerprint: &str) -> Result<Option<Vec<u8>>> {
+        self.credentials.get_revocation_cert(fingerprint)
+    }
+
     /// Enable portable mode on the credential store (skips OS keyring).
     pub fn set_portable(&mut self, portable: bool) {
         self.credentials.set_portable(portable);
