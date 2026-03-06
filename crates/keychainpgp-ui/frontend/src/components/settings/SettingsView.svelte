@@ -593,7 +593,7 @@
       <div>
         <p class="text-sm font-medium">{m.settings_keyserver_label()}</p>
         <p class="text-xs text-[var(--color-text-secondary)]">
-          Used for key search and upload. Can be comma-separated.
+          {m.settings_keyserver_desc()}
         </p>
       </div>
       <input
@@ -612,9 +612,9 @@
       class="flex items-center justify-between p-3 rounded-lg border border-[var(--color-border)]"
     >
       <div>
-        <p class="text-sm font-medium">Automatic Keyserver Upload</p>
+        <p class="text-sm font-medium">{m.settings_keyserver_upload_label()}</p>
         <p class="text-xs text-[var(--color-text-secondary)]">
-          Automatically upload newly generated public keys
+          {m.settings_keyserver_upload_desc()}
         </p>
       </div>
       <input

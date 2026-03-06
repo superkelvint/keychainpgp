@@ -274,4 +274,6 @@
   "fingerprint_copy": "Copy fingerprint",
   "kbd_ctrl": "Ctrl",
   "kbd_shift": "Shift"
+  ,"settings_keyserver_upload_label": "Automatic Keyserver Upload"
+  ,"settings_keyserver_upload_desc": "Automatically upload newly generated public keys"
 }
