@@ -1,6 +1,7 @@
 <script lang="ts">
   import { settingsStore } from "$lib/stores/settings.svelte";
   import {
+    keyserverUpload,
     clearPassphraseCache,
     enableOpsecMode,
     disableOpsecMode,
@@ -109,7 +110,9 @@
     const newValue = !settingsStore.settings.opsec_mode;
     await settingsStore.save({ opsec_mode: newValue });
     if (newValue) {
-      await enableOpsecMode(settingsStore.settings.opsec_window_title || undefined);
+      await enableOpsecMode(
+        settingsStore.settings.opsec_window_title || undefined,
+      );
       appStore.setStatus(m.opsec_enabled());
     } else {
       await disableOpsecMode();
@@ -123,7 +126,9 @@
   };
 
   function toggleProxy() {
-    settingsStore.save({ proxy_enabled: !settingsStore.settings.proxy_enabled });
+    settingsStore.save({
+      proxy_enabled: !settingsStore.settings.proxy_enabled,
+    });
     proxyTestResult = null;
   }
 
@@ -158,6 +163,61 @@
       proxyTestSuccess = false;
     } finally {
       proxyTesting = false;
+    }
+  }
+
+  async function handleUploadToggle() {
+    const wasEnabled = settingsStore.settings.upload_to_keyservers;
+    const isNowEnabled = !wasEnabled;
+
+    await settingsStore.save({ upload_to_keyservers: isNowEnabled });
+
+    if (isNowEnabled && keyStore.ownKeys.length > 0) {
+      appStore.openModal("confirm", {
+        title: m.settings_upload_existing_title(),
+        message: m.settings_upload_existing_message(),
+        confirmLabel: m.confirm_yes(),
+        cancelLabel: m.confirm_no(),
+        onConfirm: async () => {
+          appStore.closeModal();
+          const urls = settingsStore.settings.keyserver_url
+            .split(",")
+            .map((u: string) => u.trim())
+            .filter((u: string) => u.length > 0);
+
+          if (urls.length === 0) return;
+
+          appStore.setStatus(m.loading());
+          let successCount = 0;
+          let failCount = 0;
+
+          for (const key of keyStore.ownKeys) {
+            for (const url of urls) {
+              try {
+                await keyserverUpload(key.fingerprint, url);
+                successCount++;
+              } catch (e) {
+                console.error(
+                  `Failed to upload ${key.fingerprint} to ${url}:`,
+                  e,
+                );
+                failCount++;
+              }
+            }
+          }
+
+          if (failCount === 0) {
+            appStore.setStatus(m.settings_upload_success_all());
+          } else {
+            appStore.setStatus(
+              m.settings_upload_status({
+                success: successCount,
+                failed: failCount,
+              }),
+            );
+          }
+        },
+      });
     }
   }
 
@@ -223,7 +283,9 @@
     >
       <div>
         <p class="text-sm font-medium">{m.settings_language_label()}</p>
-        <p class="text-xs text-[var(--color-text-secondary)]">{m.settings_language_desc()}</p>
+        <p class="text-xs text-[var(--color-text-secondary)]">
+          {m.settings_language_desc()}
+        </p>
       </div>
       <select
         value={settingsStore.settings.locale}
@@ -251,7 +313,9 @@
       >
         <div>
           <p class="text-sm font-medium">{m.settings_auto_clear_label()}</p>
-          <p class="text-xs text-[var(--color-text-secondary)]">{m.settings_auto_clear_desc()}</p>
+          <p class="text-xs text-[var(--color-text-secondary)]">
+            {m.settings_auto_clear_desc()}
+          </p>
         </div>
         <input
           type="checkbox"
@@ -351,7 +415,9 @@
     >
       <div>
         <p class="text-sm font-medium">{m.settings_include_armor_label()}</p>
-        <p class="text-xs text-[var(--color-text-secondary)]">{m.settings_include_armor_desc()}</p>
+        <p class="text-xs text-[var(--color-text-secondary)]">
+          {m.settings_include_armor_desc()}
+        </p>
       </div>
       <input
         type="checkbox"
@@ -413,7 +479,9 @@
       >
         <div>
           <p class="text-sm font-medium">{m.settings_opsec_enable()}</p>
-          <p class="text-xs text-[var(--color-text-secondary)]">{m.settings_opsec_enable_desc()}</p>
+          <p class="text-xs text-[var(--color-text-secondary)]">
+            {m.settings_opsec_enable_desc()}
+          </p>
         </div>
         <input
           type="checkbox"
@@ -506,7 +574,9 @@
           <Globe size={14} />
           {m.settings_proxy()}
         </p>
-        <p class="text-xs text-[var(--color-text-secondary)]">{m.settings_proxy_desc()}</p>
+        <p class="text-xs text-[var(--color-text-secondary)]">
+          {m.settings_proxy_desc()}
+        </p>
       </div>
       <input
         type="checkbox"
@@ -560,7 +630,9 @@
             onclick={handleProxyTest}
             disabled={proxyTesting}
           >
-            {proxyTesting ? m.settings_proxy_testing() : m.settings_proxy_test()}
+            {proxyTesting
+              ? m.settings_proxy_testing()
+              : m.settings_proxy_test()}
           </button>
           {#if proxyTestResult}
             <p

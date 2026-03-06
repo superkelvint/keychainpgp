@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
 use serde::Serialize;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 use tauri_plugin_store::StoreExt;
 
 use keychainpgp_core::CryptoEngine;
@@ -75,7 +75,8 @@ impl From<KeyRecord> for KeyInfo {
 
 /// Generate a new key pair and store it in the keyring.
 #[tauri::command]
-pub fn generate_key_pair(
+pub async fn generate_key_pair(
+    app: AppHandle,
     state: State<'_, AppState>,
     name: String,
     email: String,
@@ -149,6 +150,39 @@ pub fn generate_key_pair(
             keyring.store_revocation_cert(&record.fingerprint, &key_pair.revocation_cert)
         {
             tracing::warn!("failed to store revocation certificate: {e}");
+        }
+    }
+
+    // Automatic Keyserver Upload
+    let settings = super::settings::get_settings(app.clone(), state.clone());
+    if settings.upload_to_keyservers {
+        let fingerprint = record.fingerprint.clone();
+        let urls: Vec<String> = settings
+            .keyserver_url
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+
+        if !urls.is_empty() {
+            let app_handle = app.clone();
+            tauri::async_runtime::spawn(async move {
+                let state_handle = app_handle.state::<AppState>();
+                for url in urls {
+                    tracing::info!("automatically uploading key {} to {}", fingerprint, url);
+                    let result = keyserver_upload(
+                        app_handle.clone(),
+                        state_handle.clone(),
+                        fingerprint.clone(),
+                        Some(url.clone()),
+                    )
+                    .await;
+                    match result {
+                        Ok(_) => tracing::info!("automatic upload to {} successful", url),
+                        Err(e) => tracing::warn!("automatic upload to {} failed: {}", url, e),
+                    }
+                }
+            });
         }
     }
 
@@ -482,17 +516,10 @@ pub async fn keyserver_search(
     query: String,
     keyserver_url: Option<String>,
 ) -> Result<Vec<KeyInfo>, String> {
-    let settings_url = {
-        let store = app.store("settings.json").ok();
-        let val = store.and_then(|s| s.get("settings"));
-        let settings: Option<super::settings::Settings> =
-            val.and_then(|v| serde_json::from_value(v).ok());
-        settings
-            .map(|s| s.keyserver_url)
-            .unwrap_or_else(|| "https://keys.openpgp.org".to_string())
-    };
-
-    let url_string = keyserver_url.unwrap_or(settings_url);
+    let url_string = keyserver_url.unwrap_or_else(|| {
+        let settings = super::settings::get_settings(app.clone(), _state.clone());
+        settings.keyserver_url
+    });
     let urls: Vec<String> = url_string
         .split(',')
         .map(|s| {
@@ -633,17 +660,8 @@ pub async fn keyserver_upload(
     fingerprint: String,
     keyserver_url: Option<String>,
 ) -> Result<String, String> {
-    let settings_url = {
-        let store = app.store("settings.json").ok();
-        let val = store.and_then(|s| s.get("settings"));
-        let settings: Option<super::settings::Settings> =
-            val.and_then(|v| serde_json::from_value(v).ok());
-        settings
-            .map(|s| s.keyserver_url)
-            .unwrap_or_else(|| "https://keys.openpgp.org".to_string())
-    };
-
-    let url_string = keyserver_url.unwrap_or(settings_url);
+    let settings = super::settings::get_settings(app.clone(), state.clone());
+    let url_string = keyserver_url.unwrap_or_else(|| settings.keyserver_url.clone());
     let urls: Vec<String> = url_string
         .split(',')
         .map(|s| s.trim().to_string())
@@ -658,7 +676,11 @@ pub async fn keyserver_upload(
         validate_keyserver_url(url)?;
     }
 
-    let proxy = get_proxy_url(&app);
+    let proxy = if settings.proxy_enabled {
+        get_proxy_url(&app)
+    } else {
+        None
+    };
 
     let key_data = {
         let keyring = state

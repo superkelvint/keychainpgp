@@ -26,6 +26,7 @@ export interface ModalProps {
   title?: string;
   message?: string;
   confirmLabel?: string;
+  cancelLabel?: string;
   onConfirm?: () => void;
   /** For revoke modal */
   onConfirmRevoke?: (deleteLocal: boolean) => void;
