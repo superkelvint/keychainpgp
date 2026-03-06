@@ -41,28 +41,10 @@
     await initPlatform();
     mobile = isMobile();
 
-    await Promise.all([
-      keyStore.refresh(),
-      settingsStore.load(),
-    ]);
+    await Promise.all([keyStore.refresh(), settingsStore.load()]);
     initLocale(settingsStore.settings.locale);
 
     if (isDesktop()) {
-      clipboardStore.startPolling();
-
-      // Register global hotkeys (desktop only)
-      await registerHotkeys({
-        onEncrypt: () => appStore.dispatchAction("encrypt"),
-        onDecrypt: () => appStore.dispatchAction("decrypt"),
-        onSign: () => appStore.dispatchAction("sign"),
-        onVerify: () => appStore.dispatchAction("verify"),
-        onPanic: async () => {
-          if (settingsStore.settings.opsec_mode) {
-            await panicWipe();
-          }
-        },
-      });
-
       // Listen for tray menu actions (desktop only)
       unlistenTray = await listen<string>("tray-action", (event) => {
         const action = event.payload as AppAction;
@@ -74,6 +56,33 @@
     }
 
     initialized = true;
+  });
+
+  // Reactive clipboard and hotkeys setup (desktop only)
+  $effect(() => {
+    if (!initialized || !isDesktop()) return;
+
+    const monitoring = settingsStore.settings.clipboard_monitoring;
+
+    if (monitoring) {
+      clipboardStore.startPolling();
+      registerHotkeys({
+        onEncrypt: () => appStore.dispatchAction("encrypt"),
+        onDecrypt: () => appStore.dispatchAction("decrypt"),
+        onSign: () => appStore.dispatchAction("sign"),
+        onVerify: () => appStore.dispatchAction("verify"),
+        onPanic: async () => {
+          if (settingsStore.settings.opsec_mode) {
+            await panicWipe();
+          }
+        },
+      });
+    } else {
+      clipboardStore.stopPolling();
+      unregisterHotkeys();
+      // If monitoring is disabled, default to compose mode
+      appStore.inputMode = "compose";
+    }
   });
 
   onDestroy(() => {
