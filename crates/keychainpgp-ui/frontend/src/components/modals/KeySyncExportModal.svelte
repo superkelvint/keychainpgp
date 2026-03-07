@@ -134,29 +134,28 @@
 
       <!-- QR code carousel with auto-play -->
       {#if bundle.qr_parts.length > 0}
-        <div class="space-y-2">
+        <div class="mx-auto space-y-2" style={qrFixedSize ? `width:${qrFixedSize + 32}px` : ""}>
           <div
             class="flex items-center justify-center rounded-lg bg-white p-4"
-            style={qrFixedSize
-              ? `min-width:${qrFixedSize + 32}px;min-height:${qrFixedSize + 32}px`
-              : ""}
+            style={qrFixedSize ? `width:${qrFixedSize + 32}px;height:${qrFixedSize + 32}px` : ""}
           >
             <img
               src="data:image/svg+xml;base64,{btoa(bundle.qr_parts[currentQrIndex])}"
               alt={m.qr_code_alt()}
+              class="h-full w-full"
             />
           </div>
           {#if bundle.qr_parts.length > 1}
             <!-- Controls: arrows + play/pause + counter -->
             <div class="flex items-center justify-center gap-2">
-              {#if !autoPlay}
-                <button
-                  class="rounded p-1.5 transition-colors hover:bg-[var(--color-bg-secondary)]"
-                  onclick={goPrev}
-                >
-                  <ChevronLeft size={18} />
-                </button>
-              {/if}
+              <button
+                class="rounded p-1.5 transition-colors hover:bg-[var(--color-bg-secondary)]
+                       {autoPlay ? 'invisible' : ''}"
+                onclick={goPrev}
+                disabled={autoPlay}
+              >
+                <ChevronLeft size={18} />
+              </button>
               <button
                 class="rounded p-1.5 transition-colors hover:bg-[var(--color-bg-secondary)]"
                 onclick={toggleAutoPlay}
@@ -168,14 +167,14 @@
                   <Play size={18} />
                 {/if}
               </button>
-              {#if !autoPlay}
-                <button
-                  class="rounded p-1.5 transition-colors hover:bg-[var(--color-bg-secondary)]"
-                  onclick={goNext}
-                >
-                  <ChevronRight size={18} />
-                </button>
-              {/if}
+              <button
+                class="rounded p-1.5 transition-colors hover:bg-[var(--color-bg-secondary)]
+                       {autoPlay ? 'invisible' : ''}"
+                onclick={goNext}
+                disabled={autoPlay}
+              >
+                <ChevronRight size={18} />
+              </button>
               <span class="text-sm font-medium tabular-nums">
                 {currentQrIndex + 1}/{bundle.qr_parts.length}
               </span>

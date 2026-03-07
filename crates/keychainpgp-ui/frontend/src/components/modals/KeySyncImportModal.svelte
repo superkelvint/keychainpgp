@@ -46,7 +46,7 @@
 
     totalParts = part.total;
     scannedParts.set(part.part, part.data);
-    scannedParts = new Map(scannedParts); // reactivity
+    scannedParts = new Map(scannedParts); // trigger reactivity
 
     if (scannedParts.size >= part.total) {
       // All parts collected — reassemble

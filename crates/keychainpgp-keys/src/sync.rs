@@ -39,9 +39,9 @@ impl Drop for KeyBundleEntry {
 
 /// Maximum bytes per QR code part.
 ///
-/// 1000 bytes + the `KCPGP:N/M:` header lands around QR version 18–22
-/// at ECC-L, which modern phone cameras handle reliably.
-const QR_PART_SIZE: usize = 1000;
+/// 200 bytes keeps QR codes at version 5–7 (ECC-L), which phone cameras
+/// scan reliably even with fast carousel autoplay.
+const QR_PART_SIZE: usize = 200;
 
 /// Prefix for multi-part QR codes.
 const QR_PREFIX: &str = "KCPGP";
