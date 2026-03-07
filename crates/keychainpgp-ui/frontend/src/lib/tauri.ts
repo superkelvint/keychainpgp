@@ -246,12 +246,16 @@ export interface SyncBundle {
   file_data: string;
 }
 
-export async function exportKeyBundle(): Promise<SyncBundle> {
-  return invoke("export_key_bundle");
+export async function exportKeyBundle(qrPartSize?: number): Promise<SyncBundle> {
+  return invoke("export_key_bundle", { qrPartSize: qrPartSize ?? null });
 }
 
 export async function importKeyBundle(encryptedData: string, passphrase: string): Promise<number> {
   return invoke("import_key_bundle", { encryptedData, passphrase });
+}
+
+export async function saveSyncFile(path: string, data: string): Promise<void> {
+  return invoke("save_sync_file", { path, data });
 }
 
 // --- OPSEC ---

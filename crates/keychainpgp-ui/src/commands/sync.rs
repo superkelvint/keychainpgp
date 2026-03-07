@@ -20,7 +20,10 @@ pub struct SyncBundle {
 
 /// Export all own keys as an encrypted bundle for sync.
 #[tauri::command]
-pub fn export_key_bundle(state: State<'_, AppState>) -> Result<SyncBundle, String> {
+pub fn export_key_bundle(
+    state: State<'_, AppState>,
+    qr_part_size: Option<u32>,
+) -> Result<SyncBundle, String> {
     let keyring = state
         .keyring
         .lock()
@@ -33,25 +36,21 @@ pub fn export_key_bundle(state: State<'_, AppState>) -> Result<SyncBundle, Strin
     // Build bundle of all keys (own keys with secret material + contact public keys)
     let mut entries = Vec::new();
     for key in &all_keys {
-        if key.is_own_key {
-            let secret = keyring
+        let secret_key = if key.is_own_key && keyring.has_secret_key(&key.fingerprint) {
+            keyring
                 .get_secret_key(&key.fingerprint)
-                .map_err(|e| format!("Failed to get secret key: {e}"))?;
-
-            entries.push(keychainpgp_keys::sync::KeyBundleEntry {
-                fingerprint: key.fingerprint.clone(),
-                public_key: key.pgp_data.clone(),
-                secret_key: Some(secret.expose_secret().clone()),
-                trust_level: key.trust_level,
-            });
+                .ok()
+                .map(|s| s.expose_secret().clone())
         } else {
-            entries.push(keychainpgp_keys::sync::KeyBundleEntry {
-                fingerprint: key.fingerprint.clone(),
-                public_key: key.pgp_data.clone(),
-                secret_key: None,
-                trust_level: key.trust_level,
-            });
-        }
+            None
+        };
+
+        entries.push(keychainpgp_keys::sync::KeyBundleEntry {
+            fingerprint: key.fingerprint.clone(),
+            public_key: key.pgp_data.clone(),
+            secret_key,
+            trust_level: key.trust_level,
+        });
     }
 
     if entries.is_empty() {
@@ -59,24 +58,28 @@ pub fn export_key_bundle(state: State<'_, AppState>) -> Result<SyncBundle, Strin
     }
 
     let bundle = keychainpgp_keys::sync::KeyBundle {
-        version: 1,
+        version: 2,
         keys: entries,
     };
 
     // Generate random passphrase
     let passphrase = keychainpgp_keys::sync::generate_sync_passphrase();
 
-    // Serialize and encrypt with passphrase (SKESK)
+    // Serialize, compress, and encrypt with passphrase (SKESK)
     let bundle_json =
         serde_json::to_vec(&bundle).map_err(|e| format!("Serialization failed: {e}"))?;
 
+    let compressed = keychainpgp_keys::sync::compress(&bundle_json)
+        .map_err(|e| format!("Compression failed: {e}"))?;
+
     let encrypted = state
         .engine
-        .encrypt_symmetric(&bundle_json, passphrase.as_bytes())
+        .encrypt_symmetric(&compressed, passphrase.as_bytes())
         .map_err(|e| format!("Encryption failed: {e}"))?;
 
-    // Split into QR-sized parts and render each as SVG
-    let parts = keychainpgp_keys::sync::split_for_qr(&encrypted);
+    // Split into QR-sized parts with fountain parity codes
+    let part_size = qr_part_size.unwrap_or(200) as usize;
+    let parts = keychainpgp_keys::sync::split_for_qr_with_size(&encrypted, part_size);
 
     // First QR code: passphrase (so the scanner can auto-fill it)
     let pass_qr_data = format!("KCPGP-PASS:{passphrase}");
@@ -99,7 +102,7 @@ pub fn export_key_bundle(state: State<'_, AppState>) -> Result<SyncBundle, Strin
         })
         .collect();
 
-    // Prepend passphrase QR, then data QRs
+    // Prepend passphrase QR, then data QRs (including fountain parity)
     let mut qr_parts = vec![pass_svg];
     qr_parts.extend(data_qr_parts?);
 
@@ -127,10 +130,14 @@ pub fn import_key_bundle(
         .decrypt_skesk(&encrypted, &passphrase)
         .map_err(|e| format!("Decryption failed — check the passphrase: {e}"))?;
 
-    let bundle: keychainpgp_keys::sync::KeyBundle =
-        serde_json::from_slice(&decrypted).map_err(|e| format!("Invalid bundle format: {e}"))?;
+    // Decompress if compressed (v2), or use raw JSON (v1 backward compat)
+    let json_data = keychainpgp_keys::sync::decompress_or_raw(&decrypted)
+        .map_err(|e| format!("Decompression failed: {e}"))?;
 
-    if bundle.version != 1 {
+    let bundle: keychainpgp_keys::sync::KeyBundle =
+        serde_json::from_slice(&json_data).map_err(|e| format!("Invalid bundle format: {e}"))?;
+
+    if bundle.version > 2 {
         return Err(format!(
             "Unsupported bundle version: {}. Please update KeychainPGP.",
             bundle.version
@@ -146,11 +153,19 @@ pub fn import_key_bundle(
     for entry in &bundle.keys {
         // Check if key already exists
         let existing = keyring.get_key(&entry.fingerprint).ok().flatten();
-        let already_has_secret = existing.as_ref().is_some_and(|k| k.is_own_key);
 
-        if already_has_secret {
-            // Skip keys we already have with secret material
-            continue;
+        if let Some(ref existing_key) = existing {
+            if existing_key.is_own_key {
+                // Already have this key with secret material — skip
+                continue;
+            }
+            if entry.secret_key.is_some() {
+                // Upgrade: existing public-only -> own key with secret material
+                let _ = keyring.delete_key(&existing_key.fingerprint);
+            } else {
+                // Already have this public key — skip
+                continue;
+            }
         }
 
         // Import using the engine to inspect and validate
@@ -186,4 +201,10 @@ pub fn import_key_bundle(
     }
 
     Ok(imported)
+}
+
+/// Save sync bundle data to a file chosen by the user.
+#[tauri::command]
+pub fn save_sync_file(path: String, data: String) -> Result<(), String> {
+    std::fs::write(&path, data.as_bytes()).map_err(|e| format!("Failed to save file: {e}"))
 }
