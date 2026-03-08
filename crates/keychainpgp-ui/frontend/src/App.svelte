@@ -34,6 +34,7 @@
   import RevokeKeyModal from "./components/modals/RevokeKeyModal.svelte";
   import DonateModal from "./components/modals/DonateModal.svelte";
   import NoticeDialog from "./components/modals/NoticeDialog.svelte";
+  import PublishPromptModal from "./components/modals/PublishPromptModal.svelte";
 
   let initialized = $state(false);
   let mobile = $state(false);
@@ -171,5 +172,7 @@
     <RevokeKeyModal onConfirmRevoke={appStore.modalProps.onConfirmRevoke!} />
   {:else if appStore.activeModal === "donate"}
     <DonateModal />
+  {:else if appStore.activeModal === "publish-prompt"}
+    <PublishPromptModal />
   {/if}
 </main>

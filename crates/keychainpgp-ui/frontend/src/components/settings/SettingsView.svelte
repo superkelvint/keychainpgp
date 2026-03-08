@@ -106,7 +106,7 @@
       if (disabledUpload) {
         appStore.openModal("notice", {
           title: m.settings_opsec(),
-          message: m.opsec_upload_disabled(),
+          message: m.opsec_disabled(),
         });
         // Reload settings to ensure UI reflects the change
         await settingsStore.load();
@@ -561,6 +561,23 @@
           })}
         class="w-56 rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 text-sm
                focus:ring-2 focus:ring-[var(--color-primary)] focus:outline-none"
+      />
+    </label>
+
+    <label class="flex items-center justify-between p-3 rounded-lg border border-[var(--color-border)]">
+      <div>
+        <p class="text-sm font-medium">{m.settings_unverified_keyserver_label()}</p>
+        <p class="text-xs text-[var(--color-text-secondary)]">
+          {m.settings_unverified_keyserver_desc()}
+          <span class="block mt-1 text-[var(--color-danger)] font-medium">{m.settings_unverified_keyservers_warning()}</span>
+        </p>
+      </div>
+      <input
+        type="text"
+        value={settingsStore.settings.unverified_keyserver_url}
+        onchange={(e) => settingsStore.save({ unverified_keyserver_url: e.currentTarget.value })}
+        class="w-56 px-2 py-1 text-sm rounded border border-[var(--color-border)] bg-[var(--color-bg)]
+               focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
       />
     </label>
 

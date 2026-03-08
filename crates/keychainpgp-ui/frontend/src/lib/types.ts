@@ -16,6 +16,7 @@ export type ModalType =
   | "key-sync-export"
   | "key-sync-import"
   | "key-revoke"
+  | "publish-prompt"
   | "donate";
 
 export interface ModalProps {
