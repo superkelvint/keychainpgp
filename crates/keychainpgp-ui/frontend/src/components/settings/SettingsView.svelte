@@ -48,17 +48,9 @@
     if (current.length === 0) {
       current = keyStore.ownKeys.map(k => k.fingerprint);
     }
-<<<<<<< HEAD
     const next = current.includes(fp) ? current.filter((k) => k !== fp) : [...current, fp];
     const allOwn = keyStore.ownKeys.map((k) => k.fingerprint);
     const isAll = allOwn.length > 0 && allOwn.every((f) => next.includes(f));
-=======
-    const next = current.includes(fp)
-      ? current.filter(k => k !== fp)
-      : [...current, fp];
-    const allOwn = keyStore.ownKeys.map(k => k.fingerprint);
-    const isAll = allOwn.length > 0 && allOwn.every(f => next.includes(f));
->>>>>>> fb12d5f (revert: remove automatic keyserver upload)
     settingsStore.save({ encrypt_to_self_keys: isAll ? [] : next });
   }
 
@@ -175,7 +167,6 @@
 
   <!-- Theme -->
   <section class="space-y-3">
-<<<<<<< HEAD
     <h3 class="text-sm font-semibold tracking-wide text-[var(--color-text-secondary)] uppercase">
       {m.settings_appearance()}
     </h3>
@@ -183,13 +174,6 @@
       {#each ["system", "light", "dark"] as theme}
         <button
           class="rounded-lg border px-4 py-2 text-sm transition-colors"
-=======
-    <h3 class="text-sm font-semibold text-[var(--color-text-secondary)] uppercase tracking-wide">{m.settings_appearance()}</h3>
-    <div class="flex gap-2">
-      {#each ["system", "light", "dark"] as theme}
-        <button
-          class="px-4 py-2 text-sm rounded-lg border transition-colors"
->>>>>>> fb12d5f (revert: remove automatic keyserver upload)
           class:bg-[var(--color-primary)]={settingsStore.settings.theme === theme}
           class:text-white={settingsStore.settings.theme === theme}
           class:border-[var(--color-primary)]={settingsStore.settings.theme === theme}
@@ -202,18 +186,13 @@
     </div>
 
     {#if desktop}
-<<<<<<< HEAD
       <label
         class="flex items-center justify-between rounded-lg border border-[var(--color-border)] p-3"
       >
-=======
-      <label class="flex items-center justify-between p-3 rounded-lg border border-[var(--color-border)]">
->>>>>>> fb12d5f (revert: remove automatic keyserver upload)
         <div>
           <p class="text-sm font-medium">{m.settings_close_to_tray_label()}</p>
           <p class="text-xs text-[var(--color-text-secondary)]">{m.settings_close_to_tray_desc()}</p>
         </div>
-<<<<<<< HEAD
         <input
           type="checkbox"
           checked={settingsStore.settings.close_to_tray}
@@ -221,17 +200,11 @@
             settingsStore.save({ close_to_tray: !settingsStore.settings.close_to_tray })}
           class="h-4 w-4 accent-[var(--color-primary)]"
         />
-=======
-        <input type="checkbox" checked={settingsStore.settings.close_to_tray} onchange={() => settingsStore.save({ close_to_tray: !settingsStore.settings.close_to_tray })}
-          class="w-4 h-4 accent-[var(--color-primary)]" />
->>>>>>> fb12d5f (revert: remove automatic keyserver upload)
-      </label>
     {/if}
   </section>
 
   <!-- Language -->
   <section class="space-y-3">
-<<<<<<< HEAD
     <h3 class="text-sm font-semibold tracking-wide text-[var(--color-text-secondary)] uppercase">
       {m.settings_language()}
     </h3>
@@ -239,11 +212,6 @@
     <label
       class="flex items-center justify-between rounded-lg border border-[var(--color-border)] p-3"
     >
-=======
-    <h3 class="text-sm font-semibold text-[var(--color-text-secondary)] uppercase tracking-wide">{m.settings_language()}</h3>
-
-    <label class="flex items-center justify-between p-3 rounded-lg border border-[var(--color-border)]">
->>>>>>> fb12d5f (revert: remove automatic keyserver upload)
       <div>
         <p class="text-sm font-medium">{m.settings_language_label()}</p>
         <p class="text-xs text-[var(--color-text-secondary)]">{m.settings_language_desc()}</p>
@@ -264,7 +232,6 @@
 
   <!-- Clipboard (desktop only) -->
   {#if desktop}
-<<<<<<< HEAD
     <section class="space-y-3">
       <h3 class="text-sm font-semibold tracking-wide text-[var(--color-text-secondary)] uppercase">
         {m.settings_clipboard()}
@@ -273,28 +240,11 @@
       <label
         class="flex items-center justify-between rounded-lg border border-[var(--color-border)] p-3"
       >
-=======
-  <section class="space-y-3">
-    <h3 class="text-sm font-semibold text-[var(--color-text-secondary)] uppercase tracking-wide">{m.settings_clipboard()}</h3>
-
-    <label class="flex items-center justify-between p-3 rounded-lg border border-[var(--color-border)]">
-      <div>
-        <p class="text-sm font-medium">{m.settings_auto_clear_label()}</p>
-        <p class="text-xs text-[var(--color-text-secondary)]">{m.settings_auto_clear_desc()}</p>
-      </div>
-      <input type="checkbox" checked={settingsStore.settings.auto_clear_enabled} onchange={() => toggle("auto_clear_enabled")}
-        class="w-4 h-4 accent-[var(--color-primary)]" />
-    </label>
-
-    {#if settingsStore.settings.auto_clear_enabled}
-      <label class="flex items-center justify-between p-3 rounded-lg border border-[var(--color-border)]">
->>>>>>> fb12d5f (revert: remove automatic keyserver upload)
         <div>
           <p class="text-sm font-medium">{m.settings_auto_clear_delay_label()}</p>
           <p class="text-xs text-[var(--color-text-secondary)]">{m.settings_auto_clear_delay_desc()}</p>
         </div>
         <input
-<<<<<<< HEAD
           type="checkbox"
           checked={settingsStore.settings.auto_clear_enabled}
           onchange={() => toggle("auto_clear_enabled")}
@@ -325,24 +275,10 @@
         </label>
       {/if}
     </section>
-=======
-          type="number"
-          min="5"
-          max="300"
-          value={settingsStore.settings.auto_clear_delay_secs}
-          onchange={(e) => settingsStore.save({ auto_clear_delay_secs: parseInt(e.currentTarget.value) || 30 })}
-          class="w-20 px-2 py-1 text-sm rounded border border-[var(--color-border)] bg-[var(--color-bg)]
-                 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
-        />
-      </label>
-    {/if}
-  </section>
->>>>>>> fb12d5f (revert: remove automatic keyserver upload)
   {/if}
 
   <!-- Encryption -->
   <section class="space-y-3">
-<<<<<<< HEAD
     <h3 class="text-sm font-semibold tracking-wide text-[var(--color-text-secondary)] uppercase">
       {m.settings_encryption()}
     </h3>
@@ -350,26 +286,16 @@
     <label
       class="flex items-center justify-between rounded-lg border border-[var(--color-border)] p-3"
     >
-=======
-    <h3 class="text-sm font-semibold text-[var(--color-text-secondary)] uppercase tracking-wide">{m.settings_encryption()}</h3>
-
-    <label class="flex items-center justify-between p-3 rounded-lg border border-[var(--color-border)]">
->>>>>>> fb12d5f (revert: remove automatic keyserver upload)
       <div>
         <p class="text-sm font-medium">{m.settings_encrypt_to_self_label()}</p>
         <p class="text-xs text-[var(--color-text-secondary)]">{m.settings_encrypt_to_self_desc()}</p>
       </div>
-<<<<<<< HEAD
       <input
         type="checkbox"
         checked={settingsStore.settings.encrypt_to_self}
         onchange={() => toggle("encrypt_to_self")}
         class="h-4 w-4 accent-[var(--color-primary)]"
       />
-=======
-      <input type="checkbox" checked={settingsStore.settings.encrypt_to_self} onchange={() => toggle("encrypt_to_self")}
-        class="w-4 h-4 accent-[var(--color-primary)]" />
->>>>>>> fb12d5f (revert: remove automatic keyserver upload)
     </label>
 
     {#if settingsStore.settings.encrypt_to_self && keyStore.ownKeys.length > 0}
@@ -385,7 +311,6 @@
         </p>
         <div class="space-y-1">
           {#each keyStore.ownKeys as k (k.fingerprint)}
-<<<<<<< HEAD
             <label
               class="flex cursor-pointer items-center gap-2 rounded p-2 hover:bg-[var(--color-bg-secondary)]"
             >
@@ -393,12 +318,6 @@
                 type="checkbox"
                 checked={settingsStore.settings.encrypt_to_self_keys.length === 0 ||
                   settingsStore.settings.encrypt_to_self_keys.includes(k.fingerprint)}
-=======
-            <label class="flex items-center gap-2 p-2 rounded hover:bg-[var(--color-bg-secondary)] cursor-pointer">
-              <input
-                type="checkbox"
-                checked={settingsStore.settings.encrypt_to_self_keys.length === 0 || settingsStore.settings.encrypt_to_self_keys.includes(k.fingerprint)}
->>>>>>> fb12d5f (revert: remove automatic keyserver upload)
                 onchange={() => toggleSelfKey(k.fingerprint)}
                 class="h-3.5 w-3.5 accent-[var(--color-primary)]"
               />
